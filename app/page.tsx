@@ -28,6 +28,7 @@ export default function CipherCompass() {
 			enableHighAccuracy: true,
 		},
 		userDecisionTimeout: 5000,
+		watchPosition: true,
 	});
 
 	const [heading, setHeading] = useState<number | null>(null);
