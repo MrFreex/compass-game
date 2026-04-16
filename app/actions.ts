@@ -11,5 +11,5 @@ export async function getTargetCoordinates() {
 	if (!response.ok) throw new Error("Failed to fetch target coordinates");
 
 	const text = await response.json();
-	return text as { lat: number; lng: number };
+	return text as { lat: number; lng: number; range: number };
 }
