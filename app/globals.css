@@ -24,3 +24,52 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.App {
+  font-family: sans-serif;
+  text-align: center;
+}
+
+body {
+  background-color: #060627;
+}
+
+.compass {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: url(/bg.png) center no-repeat;
+  background-size: contain;
+  box-shadow: 0 0 15px rgba(0, 0, 0, 0.2);
+  margin: auto;
+}
+
+.compass > .arrow {
+  position: relative;
+  width: 0;
+  height: 0;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-style: solid;
+  border-width: 30px 20px 0 20px;
+
+  z-index: 1;
+}
+
+.compass > .compass-circle {
+  position: relative;
+  width: 75%;
+  height: 75%;
+  top: 50%;
+  left: 50%;
+  transition: transform 0.1s ease-out;
+  background: url(/fg.png)
+    center no-repeat;
+  background-size: contain;
+}
+

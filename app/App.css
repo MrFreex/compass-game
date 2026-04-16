@@ -1,0 +1,49 @@
+.App {
+  font-family: sans-serif;
+  text-align: center;
+}
+
+body {
+  background-image: url("/page-bg.jpg");
+  background-position: center;
+  background-size: 120% 120%;
+  background-color: rgba(0, 0, 0, 0.4); /* Adjust the 0.5 to change darkness */
+  background-blend-mode: multiply;
+}
+
+.compass {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  background: url(/bg.png) center no-repeat;
+  background-size: contain;
+  margin: auto;
+}
+
+.compass > .arrow {
+  position: absolute;
+  width: 0;
+  height: 0;
+  top: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  border-style: solid;
+  border-width: 30px 20px 0 20px;
+
+  z-index: 1;
+}
+
+.compass > .compass-circle {
+  position: absolute;
+  width: 75%;
+  height: 75%;
+  top: 50%;
+  left: 50%;
+  transition: transform 0.1s ease-out;
+  background: url(/fg.png) center no-repeat;
+  background-size: contain;
+}

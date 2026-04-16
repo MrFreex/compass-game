@@ -1,65 +1,197 @@
-import Image from "next/image";
+"use client";
 
-export default function Home() {
-  return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+import { useState, useEffect, useRef } from "react";
+import { useGeolocated } from "react-geolocated";
+import { getTargetCoordinates } from "./actions";
+
+import "./App.css";
+
+// Helper to calculate bearing from current location to target
+function calculateBearing(lat1: number, lon1: number, lat2: number, lon2: number) {
+	const toRad = (deg: number) => (deg * Math.PI) / 180;
+	const toDeg = (rad: number) => (rad * 180) / Math.PI;
+
+	const phi1 = toRad(lat1);
+	const phi2 = toRad(lat2);
+	const deltaLambda = toRad(lon2 - lon1);
+
+	const y = Math.sin(deltaLambda) * Math.cos(phi2);
+	const x = Math.cos(phi1) * Math.sin(phi2) - Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+	const theta = Math.atan2(y, x);
+
+	return (toDeg(theta) + 360) % 360;
+}
+
+export default function CipherCompass() {
+	const { coords, isGeolocationAvailable, isGeolocationEnabled } = useGeolocated({
+		positionOptions: {
+			enableHighAccuracy: true,
+		},
+		userDecisionTimeout: 5000,
+	});
+
+	const [heading, setHeading] = useState<number | null>(null);
+	const [targetBearing, setTargetBearing] = useState<number>(0);
+	const [errorMsg, setErrorMsg] = useState("");
+	const [started, setStarted] = useState(false);
+	const [isSpinning, setIsSpinning] = useState(false);
+	const [mounted, setMounted] = useState(false);
+	const currentRotationRef = useRef<number>(180); // Start pointing upwards (180deg offset due to image alignment)
+
+	const [targetCoords, setTargetCoords] = useState<{ lat: number; lng: number } | null>(null);
+
+	// Next.js Server Action poller
+	useEffect(() => {
+		setMounted(true);
+		let isMounted = true;
+
+		async function fetchCoords() {
+			try {
+				const coordsData = await getTargetCoordinates();
+				if (isMounted) setTargetCoords(coordsData);
+			} catch (err) {
+				console.error("Failed to fetch coordinates via Server Action", err);
+			}
+		}
+
+		fetchCoords();
+		const interval = setInterval(fetchCoords, 5000);
+
+		return () => {
+			isMounted = false;
+			clearInterval(interval);
+		};
+	}, []);
+
+	// Update the target bearing when location changes
+	useEffect(() => {
+		if (coords && targetCoords) {
+			const bearing = calculateBearing(coords.latitude, coords.longitude, targetCoords.lat, targetCoords.lng);
+			setTargetBearing(bearing);
+		}
+	}, [coords, targetCoords]);
+
+	// Request compass permissions and attach event listeners
+	const handleOrientation = (e: Event) => {
+		const orientationEvent = e as DeviceOrientationEvent & { webkitCompassHeading?: number };
+		let currentHeading = 0;
+
+		if (orientationEvent.webkitCompassHeading !== undefined) {
+			// iOS compass heading
+			currentHeading = orientationEvent.webkitCompassHeading;
+		} else if (orientationEvent.alpha !== null) {
+			// Android / standard compass heading (alpha is left-hand rotation from north)
+			currentHeading = 360 - orientationEvent.alpha;
+		} else {
+			return; // No compass sensory data
+		}
+
+		setHeading(currentHeading);
+	};
+
+	const startCompass = async () => {
+		if (started) return;
+		setStarted(true);
+		setErrorMsg("");
+
+		if (!isGeolocationAvailable || !isGeolocationEnabled) {
+			alert("Abilita la geolocalizzazione per usare la bussola.");
+			return;
+		}
+
+		const win = window as any;
+		let permissionGranted = true;
+
+		// Handle iOS 13+ device orientation permission
+		if (typeof (DeviceOrientationEvent as any) !== "undefined" && typeof (DeviceOrientationEvent as any).requestPermission === "function") {
+			try {
+				const response = await (DeviceOrientationEvent as any).requestPermission();
+				if (response === "granted") {
+					win.addEventListener("deviceorientation", handleOrientation as any, true);
+				} else {
+					setErrorMsg("Permesso per l'orientamento del dispositivo negato.");
+					permissionGranted = false;
+				}
+			} catch (error) {
+				setErrorMsg("Errore durante la richiesta dei permessi di orientamento: " + error);
+				permissionGranted = false;
+			}
+		} else {
+			// Non-iOS devices (Standard Android/Desktop)
+			if ("ondeviceorientationabsolute" in window) {
+				win.addEventListener("deviceorientationabsolute", handleOrientation as any, true);
+			} else if ("ondeviceorientation" in window) {
+				win.addEventListener("deviceorientation", handleOrientation as any, true);
+			} else {
+				setErrorMsg("API di orientamento del dispositivo non supportata in questo browser.");
+				permissionGranted = false;
+			}
+		}
+
+		if (permissionGranted) {
+			// Start spinning animation
+			setIsSpinning(true);
+			// 4 full spins = 1440 degrees added to the current value
+			currentRotationRef.current += 1440;
+
+			// Let it spin for 3 seconds before restoring snappy responses
+			setTimeout(() => {
+				setIsSpinning(false);
+			}, 3000);
+		}
+	};
+
+	// We offset by 180 degrees because the image naturally points downwards on the screen at 0 degrees!
+	const rawRotationToTarget = started ? targetBearing - (heading || 0) : 0; // Sit facing directly up before starting (180deg)
+
+	let diff = (rawRotationToTarget - currentRotationRef.current) % 360;
+	if (diff > 180) diff -= 360;
+	else if (diff < -180) diff += 360;
+
+	currentRotationRef.current += diff;
+
+	const compassCircleTransformStyle = `translate(-50%, -50%) translate(0, 2.5%) rotate(${currentRotationRef.current}deg)`;
+	// Slow, smooth transition during spins; standard tracking transition otherwise (from CSS)
+	const dynamicTransition = isSpinning ? "transform 3s cubic-bezier(0.25, 1, 0.5, 1)" : undefined;
+
+	return (
+		<div className="App">
+			<div>
+				{started && (
+					<pre className="text-sm mt-10" style={{ color: "#fff" }}>
+						Direzione Target: {targetBearing.toFixed(2)}°{"\n"}
+						Direzione Attuale: {heading !== null ? heading.toFixed(2) + "°" : "N/D"}
+						{"\n"}
+						Coordinate attuali: {coords ? `${coords.latitude.toFixed(6)}, ${coords.longitude.toFixed(6)}` : "N/D"}
+						{"\n"}
+						Coordinate target: {targetCoords ? `${targetCoords.lat.toFixed(6)}, ${targetCoords.lng.toFixed(6)}` : "N/D"}
+						{"\n"}
+					</pre>
+				)}
+			</div>
+			{errorMsg && <div style={{ color: "red", fontWeight: "bold" }}>{errorMsg}</div>}
+			<div
+				onClick={startCompass}
+				className="compass cursor-pointer"
+				style={{
+					opacity: mounted ? 1 : 0,
+					transform: `translate(-50%, -50%) scale(${mounted ? 1 : 0})`,
+					transition: "opacity 0.8s ease-out, transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275)",
+				}}
+			>
+				<div
+					className="compass-circle"
+					style={{
+						transform: compassCircleTransformStyle,
+						...(dynamicTransition ? { transition: dynamicTransition } : {}),
+					}}
+				/>
+				{!started && (
+					<span className="absolute -bottom-4 -translate-x-1/2 translate-y-full font-serif font-semibold w-full text-white drop-shadow-md">
+						Clicca la bussola per iniziare
+					</span>
+				)}
+			</div>
+		</div>
+	);
 }
